@@ -10,7 +10,7 @@ class CartScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Escuchamos el carrito
+    // Escuchamos el carrito del Provider
     final cart = Provider.of<CartProvider>(context);
 
     return Scaffold(
@@ -28,11 +28,12 @@ class CartScreen extends StatelessWidget {
             )
           : Column(
               children: [
-                // LISTA DE PRODUCTOS
+                // === LISTA DE PRODUCTOS ===
                 Expanded(
                   child: ListView.builder(
                     itemCount: cart.items.length,
                     itemBuilder: (context, index) {
+                      // Obtenemos los valores desde el mapa del provider
                       final item = cart.items.values.toList()[index];
                       final productId = cart.items.keys.toList()[index];
 
@@ -53,17 +54,17 @@ class CartScreen extends StatelessWidget {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: Colors.white,
+                              // Verifica si tiene imagen, si no muestra icono
                               backgroundImage: item.imagenUrl.isNotEmpty
-                                  // Ajusta la URL base según tu servidor
                                   ? NetworkImage('http://10.94.80.222:3000/uploads/productos/${item.imagenUrl}')
                                   : null,
                               child: item.imagenUrl.isEmpty
                                   ? const Icon(Icons.image_not_supported)
                                   : null,
                             ),
-                            title: Text(item.nombre),
+                            title: Text(item.nombre), // Usamos 'nombre'
                             subtitle: Text(
-                                "Total: \$${(item.precio * item.cantidad).toStringAsFixed(2)}"),
+                                "Total: Bs ${(item.precio * item.cantidad).toStringAsFixed(2)}"),
                             trailing: SizedBox(
                               width: 120,
                               child: Row(
@@ -75,7 +76,7 @@ class CartScreen extends StatelessWidget {
                                       cart.removerUnItem(productId);
                                     },
                                   ),
-                                  Text("${item.cantidad}"),
+                                  Text("${item.cantidad}"), // Usamos 'cantidad'
                                   IconButton(
                                     icon: const Icon(Icons.add_circle_outline),
                                     onPressed: () {
@@ -89,8 +90,8 @@ class CartScreen extends StatelessWidget {
                                         item.stockMaximo
                                       );
                                       if (error != null) {
-                                         ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                         ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                        ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text(error), duration: const Duration(seconds: 1)),
                                         );
                                       }
@@ -106,9 +107,10 @@ class CartScreen extends StatelessWidget {
                   ),
                 ),
 
-                // RESUMEN Y BOTÓN DE PAGO
+                // === RESUMEN Y BOTÓN DE PAGO ===
                 Card(
                   margin: const EdgeInsets.all(15),
+                  elevation: 5,
                   child: Padding(
                     padding: const EdgeInsets.all(15),
                     child: Column(
@@ -119,8 +121,8 @@ class CartScreen extends StatelessWidget {
                             const Text("Total:", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                             Chip(
                               label: Text(
-                                "\$${cart.totalAmount.toStringAsFixed(2)}",
-                                style: const TextStyle(color: Colors.white),
+                                "Bs ${cart.totalAmount.toStringAsFixed(2)}",
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                               ),
                               backgroundColor: Colors.green,
                             )
@@ -136,19 +138,37 @@ class CartScreen extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () {
-                              // Lógica de verificación de Login
+                              // 1️⃣ VALIDAR CARRITO VACÍO
+                              if (cart.items.isEmpty) return;
+
+                              // 2️⃣ PREPARAR DATOS (Convertir Provider -> Lista para Checkout)
+                              // Aquí convertimos los objetos del carrito en la lista que espera la siguiente pantalla
+                              List<Map<String, dynamic>> listaParaCheckout = cart.items.values.map((item) {
+                                return {
+                                  'id_producto': item.id, 
+                                  'nombre': item.nombre, 
+                                  'cantidad': item.cantidad,
+                                  'precio': item.precio,
+                                };
+                              }).toList();
+
+                              // 3️⃣ LÓGICA DE LOGIN
                               if (ApiService.estaLogueado()) {
-                                // SI ESTÁ LOGUEADO -> VA AL CHECKOUT
+                                // ✅ SI ESTÁ LOGUEADO -> VA AL CHECKOUT
                                 Navigator.of(context).push(
-                                  // 👇 AQUÍ ESTABA EL ERROR: QUITAMOS 'const'
-                                  MaterialPageRoute(builder: (context) => CheckoutScreen())
+                                  MaterialPageRoute(
+                                    builder: (context) => CheckoutScreen(
+                                      carrito: listaParaCheckout, // Lista convertida
+                                      total: cart.totalAmount,    // Total del provider
+                                    ),
+                                  ),
                                 );
                               } else {
-                                // NO ESTÁ LOGUEADO -> MUESTRA DIÁLOGO
+                                // ❌ NO ESTÁ LOGUEADO -> MUESTRA DIÁLOGO
                                 _mostrarDialogoIdentificacion(context);
                               }
                             },
-                            child: const Text("PROCEDER AL PAGO"),
+                            child: const Text("PROCEDER AL PAGO", style: TextStyle(fontSize: 16)),
                           ),
                         )
                       ],
@@ -173,9 +193,9 @@ class CartScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.of(ctx).pop();
+              Navigator.of(ctx).pop(); // Cierra el diálogo
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => LoginScreen()) // Sin const aquí también por si acaso
+                MaterialPageRoute(builder: (context) => LoginScreen()) 
               );
             },
             child: const Text('Ir al Login'),

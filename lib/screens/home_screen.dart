@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-// Importamos Provider para manejar el estado del carrito
 import 'package:provider/provider.dart';
 import '../providers/cart_provider.dart';
 import 'cart_screen.dart';
 import 'login_screen.dart';
 import 'registro_screen.dart';
-import 'productos_empresa_screen.dart'; 
+import 'productos_empresa_screen.dart';
+// IMPORTANTE: Importamos la pantalla de pedidos que creamos antes
+import 'mis_pedidos_screen.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,11 +34,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.dispose();
   }
 
-  // Función para cerrar sesión y actualizar la pantalla
+  // Función para cerrar sesión
   void _cerrarSesion() async {
     await apiService.logout();
     if (mounted) {
-      setState(() {}); // Actualiza la UI para mostrar "Invitado" de nuevo
+      setState(() {}); 
       Navigator.pop(context); // Cierra el drawer
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Sesión cerrada correctamente")),
@@ -45,13 +46,113 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+// ==========================================
+  //  MODAL DE PERFIL CON EDICIÓN
+  // ==========================================
+  void _mostrarPerfil(BuildContext context) {
+    Navigator.pop(context); // Cierra drawer
+    final user = ApiService.usuario;
+    
+    // Controladores para el formulario
+    final nombreCtrl = TextEditingController(text: user['nombre'] ?? '');
+    final phoneCtrl = TextEditingController(text: user['telefono'] ?? '');
+    final dirCtrl = TextEditingController(text: user['direccion'] ?? '');
+
+    bool editando = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Para que el teclado no tape el modal
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom, // Ajuste teclado
+              left: 20, right: 20, top: 20
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                 Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+                 const SizedBox(height: 20),
+                 
+                 Row(
+                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                   children: [
+                     const Text("Mi Perfil", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                     IconButton(
+                       icon: Icon(editando ? Icons.close : Icons.edit, color: Colors.blue),
+                       onPressed: () {
+                         setModalState(() { editando = !editando; });
+                       },
+                     )
+                   ],
+                 ),
+                 
+                 const SizedBox(height: 20),
+
+                 if (!editando) ...[
+                   // VISTA SOLO LECTURA
+                   _infoRow(Icons.person, "Nombre", user['nombre'] ?? 'Invitado'),
+                   _infoRow(Icons.email, "Email", user['email'] ?? ''),
+                   _infoRow(Icons.phone, "Teléfono", user['telefono'] ?? 'Sin teléfono'),
+                   _infoRow(Icons.location_on, "Dirección", user['direccion'] ?? 'Sin dirección'),
+                   const SizedBox(height: 20),
+                 ] else ...[
+                   // VISTA EDICIÓN (FORMULARIO)
+                   TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: "Nombre Completo", prefixIcon: Icon(Icons.person))),
+                   const SizedBox(height: 10),
+                   TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: "Teléfono", prefixIcon: Icon(Icons.phone))),
+                   const SizedBox(height: 10),
+                   TextField(controller: dirCtrl, decoration: const InputDecoration(labelText: "Dirección", prefixIcon: Icon(Icons.location_on))),
+                   const SizedBox(height: 20),
+                   
+                   ElevatedButton(
+                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size(double.infinity, 45)),
+                     child: const Text("Guardar Cambios", style: TextStyle(color: Colors.white)),
+                     onPressed: () async {
+                       // Llamar a la API para guardar
+                       bool exito = await apiService.actualizarPerfil(nombreCtrl.text, phoneCtrl.text, dirCtrl.text);
+                       if (exito) {
+                         Navigator.pop(context); // Cerrar modal
+                         setState(() {}); // Actualizar Home
+                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Perfil actualizado")));
+                       } else {
+                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error al actualizar"), backgroundColor: Colors.red));
+                       }
+                     },
+                   )
+                 ],
+                 const SizedBox(height: 20),
+              ],
+            ),
+          );
+        }
+      ),
+    );
+  }
+  // Widget auxiliar para las filas de información del perfil
+  Widget _infoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.blueGrey),
+          const SizedBox(width: 15),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          const Spacer(),
+          Text(value, style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Obtenemos los datos del usuario para el menú
     final usuario = ApiService.usuario;
     final estaLogueado = ApiService.estaLogueado();
 
-    // Intentamos obtener el nombre
     final nombreUsuario = usuario['nombre_razon_social'] ?? usuario['nombre'] ?? 'Usuario';
     final emailUsuario = usuario['email'] ?? '';
     final inicial = nombreUsuario.isNotEmpty ? nombreUsuario[0].toString().toUpperCase() : '?';
@@ -64,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           centerTitle: true,
           elevation: 0,
           actions: [
-            // 🛒 CARRITO CON CONTADOR
+            // 🛒 CARRITO
             Consumer<CartProvider>(
               builder: (_, cart, ch) => Stack(
                 alignment: Alignment.center,
@@ -72,11 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   IconButton(
                     icon: const Icon(Icons.shopping_cart_outlined, size: 28),
                     onPressed: () {
-                      Navigator.push(
-                        context, 
-                        // Quitamos 'const' por si acaso
-                        MaterialPageRoute(builder: (context) => const CartScreen())
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const CartScreen()));
                     },
                   ),
                   if (cart.itemCount > 0)
@@ -106,65 +203,72 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ),
         
-        // ☰ MENU LATERAL (DRAWER) CORREGIDO
+        // ==========================================
+        //  DRAWER (MENÚ LATERAL) ACTUALIZADO
+        // ==========================================
         drawer: Drawer(
           child: Column(
             children: [
               UserAccountsDrawerHeader(
-                decoration: const BoxDecoration(color: Colors.blue),
+                decoration: const BoxDecoration(color: Colors.blueAccent),
                 accountName: Text(
                   estaLogueado ? nombreUsuario : "Invitado",
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 ),
                 accountEmail: Text(
-                  estaLogueado ? emailUsuario : "Inicia sesión para ver tus datos",
+                  estaLogueado ? emailUsuario : "Inicia sesión para acceder a todo",
                 ),
                 currentAccountPicture: CircleAvatar(
                   backgroundColor: Colors.white,
                   child: Text(
                     estaLogueado ? inicial : '?',
-                    style: const TextStyle(fontSize: 30.0, color: Colors.blue),
+                    style: const TextStyle(fontSize: 30.0, color: Colors.blueAccent),
                   ),
                 ),
               ),
               
-              // Opciones del Menú
+              // Opciones si NO está logueado
               if (!estaLogueado) ...[
-                // SI NO ESTÁ LOGUEADO
+                ListTile(
+                  leading: const Icon(Icons.login_rounded, color: Colors.green),
+                  title: const Text("Iniciar Sesión"),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginScreen()));
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.app_registration_rounded, color: Colors.blue),
                   title: const Text("Registrarse"),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      // ⚠️ CORRECCIÓN: Quitamos 'const' aquí
-                      MaterialPageRoute(builder: (context) => RegistroScreen()),
-                    );
-                  },
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.login_rounded),
-                  title: const Text("Iniciar Sesión"),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      // ⚠️ CORRECCIÓN: Quitamos 'const' aquí
-                      MaterialPageRoute(builder: (context) => LoginScreen()),
-                    );
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => RegistroScreen()));
                   },
                 ),
               ] else ...[
-                // SI SÍ ESTÁ LOGUEADO
-                 ListTile(
-                  leading: const Icon(Icons.history, color: Colors.blue),
-                  title: const Text("Mis Pedidos"),
+                // Opciones si SÍ está logueado (NUEVAS OPCIONES)
+                ListTile(
+                  leading: const Icon(Icons.person, color: Colors.blue),
+                  title: const Text('Mi Perfil'),
+                  onTap: () => _mostrarPerfil(context), // Llama a la nueva función
+                ),
+                ListTile(
+                  leading: const Icon(Icons.history, color: Colors.orange),
+                  title: const Text('Mis Pedidos'),
+                  onTap: () {
+                    Navigator.pop(context); // Cerrar drawer
+                    // Navegar a la pantalla de pedidos
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const MisPedidosScreen()));
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.help_outline, color: Colors.green),
+                  title: const Text('Soporte / Contacto'),
                   onTap: () {
                     Navigator.pop(context);
+                    // Aquí podrías abrir WhatsApp en el futuro
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Próximamente: Historial de pedidos"))
+                      const SnackBar(content: Text("Contactando a soporte..."))
                     );
                   },
                 ),
@@ -190,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // --- PESTAÑA DE EMPRESAS ---
+  // --- PESTAÑA DE EMPRESAS (Sin cambios mayores, solo mantenemos el código) ---
   Widget _tabEmpresas() {
     return Column(
       children: [
@@ -202,10 +306,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               hintText: "Buscar empresas...",
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _searchEmpresa.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => _searchEmpresa = ''),
-                    )
+                  ? IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _searchEmpresa = ''))
                   : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -216,9 +317,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: FutureBuilder(
             future: apiService.getMicroempresas(),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               if (snapshot.hasError) return _buildErrorWidget();
               
               List<dynamic> empresas = snapshot.data as List? ?? [];
@@ -248,10 +347,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       backgroundColor: Colors.blue.shade100,
                       child: const Icon(Icons.storefront, color: Colors.blue, size: 30),
                     ),
-                    title: Text(
-                      empresas[i]['nombre_empresa'] ?? 'Empresa',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    title: Text(empresas[i]['nombre_empresa'] ?? 'Empresa', style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(empresas[i]['rubro'] ?? 'Sector comercial'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
@@ -275,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // --- PESTAÑA DE PRODUCTOS ---
+  // --- PESTAÑA DE PRODUCTOS (Mantenemos código) ---
   Widget _tabProductos() {
     return Column(
       children: [
@@ -287,10 +383,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               hintText: "Buscar productos...",
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _searchProducto.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => _searchProducto = ''),
-                    )
+                  ? IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _searchProducto = ''))
                   : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -301,9 +394,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: FutureBuilder(
             future: apiService.getTodosLosProductos(busqueda: _searchProducto.isNotEmpty ? _searchProducto : null),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               if (snapshot.hasError) return _buildErrorWidget();
               
               List<dynamic> productos = snapshot.data as List? ?? [];
@@ -329,11 +420,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // IMAGEN
                         Expanded(
                           child: prod['imagen_url'] != null
                               ? Image.network(
-                                  // ⚠️ Ajusta la IP si cambia en ApiService
                                   '${ApiService.baseUrl.replaceAll('/api', '')}/uploads/productos/${prod['imagen_url']}',
                                   fit: BoxFit.cover,
                                   width: double.infinity,
@@ -347,33 +436,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey)),
                                 ),
                         ),
-                        // INFORMACIÓN
                         Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                prod['nombre'] ?? 'Producto',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                              Text(prod['nombre'] ?? 'Producto', style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                               const SizedBox(height: 4),
-                              Text(
-                                '\$${prod['precio'] ?? 0}',
-                                style: const TextStyle(color: Colors.green, fontSize: 16, fontWeight: FontWeight.bold),
-                              ),
-                              Text(
-                                'Por: ${prod['nombre_empresa'] ?? 'Sin empresa'}',
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              
+                              Text('\$${prod['precio'] ?? 0}', style: const TextStyle(color: Colors.green, fontSize: 16, fontWeight: FontWeight.bold)),
+                              Text('Por: ${prod['nombre_empresa'] ?? 'Sin empresa'}', style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
                               const SizedBox(height: 8),
-
-                              // BOTÓN AGREGAR
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
@@ -396,20 +468,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                     
                                     if (resultado == null) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text("¡Producto agregado!"), 
-                                          backgroundColor: Colors.green,
-                                          duration: Duration(seconds: 1),
-                                        ),
-                                      );
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("¡Producto agregado!"), backgroundColor: Colors.green, duration: Duration(seconds: 1)));
                                     } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(resultado), 
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resultado), backgroundColor: Colors.red));
                                     }
                                   },
                                 ),
@@ -438,11 +499,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           const SizedBox(height: 16),
           const Text("Error al conectar"),
           const SizedBox(height: 8),
-          const Text(
-            "Verifica tu conexión con el servidor",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+          const Text("Verifica tu conexión con el servidor", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
         ],
       ),
     );

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:convert'; // Para decodificar JSON
+import 'package:shared_preferences/shared_preferences.dart'; // Para guardar sesión
 import '../services/api_service.dart';
 import 'home_screen.dart';
 import 'registro_screen.dart';
+import 'vendedor/vendedor_home_screen.dart'; // Importamos la pantalla del vendedor
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -37,17 +40,56 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       // 3. Llamada al API
-      await _apiService.login(
+      // Nota: Asumimos que tu ApiService.login devuelve el mapa de respuesta (JSON)
+      // Si tu ApiService devuelve void, avísame para ajustar esto.
+      final response = await _apiService.login(
         _emailController.text.trim(),
         _passwordController.text,
       );
 
+      // Analizamos la respuesta para ver el ROL
+      // La estructura esperada es: { token: "...", usuario: { rol_id: 3, ... } }
+      
+      // Asegúrate de que tu ApiService devuelva el objeto decoded, o hazlo aquí:
+      // Si response es String: final data = jsonDecode(response);
+      // Si response ya es Map, úsalo directo.
+      final usuario = response['usuario']; 
+      final rolId = usuario['rol_id'];
+      
+      // Guardamos datos clave en SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      // Guardamos token (si viene en la respuesta)
+      if (response['token'] != null) {
+        await prefs.setString('token', response['token']);
+      }
+
+      await prefs.setInt('rol_id', rolId ?? 0);
+      await prefs.setString('nombre', usuario['nombre'] ?? '');
+      await prefs.setInt('userId', usuario['id']);
+
+      // --- MODIFICA ESTA PARTE (Línea 78 aprox) ---
+      if (usuario['microempresa_id'] != null) {
+        // Cámbialo a 'id_microempresa' para que coincida con tu ApiService
+        await prefs.setInt('id_microempresa', usuario['microempresa_id']); 
+        print("✅ ID Empresa guardado: ${usuario['microempresa_id']}"); 
+      }
+      // --------------------------------------------
+
       if (mounted) {
-        // 4. Éxito: Navegar al Home (y eliminar Login del historial)
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => HomeScreen()),
-        );
+        // 4. DECISIÓN DE REDIRECCIÓN
+        if (rolId == 3) {
+          // ==> ES VENDEDOR
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const VendedorHomeScreen()),
+          );
+        } else {
+          // ==> ES CLIENTE O ADMIN
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => HomeScreen()),
+          );
+        }
       }
     } catch (e) {
       // 5. Error: Mostrar mensaje
@@ -85,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 // LOGO O ÍCONO
                 const Icon(
-                  Icons.inventory_2_rounded, // Icono de caja similar a tu logo
+                  Icons.inventory_2_rounded,
                   size: 80,
                   color: Colors.blue,
                 ),
@@ -156,8 +198,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade50, // Fondo azul suave
-                      foregroundColor: Colors.blue.shade900, // Texto azul oscuro
+                      backgroundColor: Colors.blue.shade50,
+                      foregroundColor: Colors.blue.shade900,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -201,7 +243,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text("¿No tienes cuenta? "),
                     GestureDetector(
                       onTap: () {
-                        // Navegación directa al registro
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => RegistroScreen()),
